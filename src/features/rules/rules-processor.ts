@@ -21,6 +21,7 @@ import {
   checkPathTraversal,
   findFilesByGlobs,
   readFileContent,
+  readFileContentOrNull,
   removeFile,
   toPosixPath,
 } from "../../utils/file.js";
@@ -64,6 +65,7 @@ import { KiroIdeRule } from "./kiro-ide-rule.js";
 import { KiroRule } from "./kiro-rule.js";
 import {
   OMP_GLOBAL_TTSR_RULES_DIR,
+  OMP_GLOBAL_TTSR_RULE_PREFIX,
   OMP_TTSR_RULE_PREFIX,
   OMP_TTSR_RULES_DIR,
   OmpRule,
@@ -797,6 +799,20 @@ export class RulesProcessor extends FeatureProcessor {
   requiresOutputForEmptyRules(): boolean {
     return this.toolTarget === "omp";
   }
+  async writeAiFiles(aiFiles: ToolFile[]): Promise<{ count: number; paths: string[] }> {
+    if (this.toolTarget === "omp") {
+      const ttsrDirs = new Set([OMP_GLOBAL_TTSR_RULES_DIR, OMP_TTSR_RULES_DIR]);
+      for (const file of aiFiles) {
+        if (!ttsrDirs.has(file.getRelativeDirPath())) continue;
+        const existing = await readFileContentOrNull(file.getFilePath());
+        if (existing !== null && !isManagedOmpTtsrContent(existing)) {
+          throw new Error(`Refusing to overwrite unmanaged OMP TTSR rule: ${file.getFilePath()}`);
+        }
+      }
+    }
+    return super.writeAiFiles(aiFiles);
+  }
+
   async reconcileManagedFiles(generatedFiles: ToolFile[]): Promise<{
     count: number;
     paths: string[];
@@ -805,12 +821,13 @@ export class RulesProcessor extends FeatureProcessor {
 
     const relativeDirPath = this.global ? OMP_GLOBAL_TTSR_RULES_DIR : OMP_TTSR_RULES_DIR;
     const directory = join(this.outputRoot, relativeDirPath);
+    const prefix = this.global ? OMP_GLOBAL_TTSR_RULE_PREFIX : OMP_TTSR_RULE_PREFIX;
     const expected = new Set(
       generatedFiles
         .filter((file) => file.getRelativeDirPath() === relativeDirPath)
         .map((file) => file.getFilePath()),
     );
-    const candidates = await findFilesByGlobs([join(directory, `${OMP_TTSR_RULE_PREFIX}*.md`)]);
+    const candidates = await findFilesByGlobs([join(directory, `${prefix}*.md`)]);
     const paths: string[] = [];
     for (const pathname of candidates) {
       if (expected.has(pathname)) continue;

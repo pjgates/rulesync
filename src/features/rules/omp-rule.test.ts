@@ -67,7 +67,7 @@ describe("OmpRule", () => {
         globs: ["src/**/*.ts"],
         condition: ["dangerous\\("],
         astCondition: ["console.log($$$ARGS)"],
-        scope: ["text", "tool:edit(src/**/*.ts)"],
+        scope: ["tool:edit(src/**/*.ts)"],
         interruptMode: "always",
       },
       body: "Triggered body",
@@ -80,10 +80,14 @@ describe("OmpRule", () => {
       ),
     });
     const byName = new Map(files.map((file) => [file.getRelativeFilePath(), file]));
+    const generatedNames = files.map((file) => file.getRelativeFilePath());
+    expect(generatedNames.indexOf(OMP_RULES_MARKER)).toBeGreaterThan(
+      generatedNames.indexOf("z-root.md"),
+    );
 
     expect(byName.get("z-root.md")?.getFileContent()).toBe("Root body\n");
     expect(byName.get("a-typescript.md")?.getFileContent()).toBe("TypeScript body\n");
-    const triggeredFile = byName.get("rulesync-b-triggered.md");
+    const triggeredFile = byName.get("rulesync-project-b-triggered.md");
     expect(triggeredFile?.getRelativeDirPath()).toBe(OMP_TTSR_RULES_DIR);
     expect(isManagedOmpTtsrContent(triggeredFile!.getFileContent())).toBe(true);
     const parsedTriggered = parseFrontmatter(triggeredFile!.getFileContent());
@@ -91,7 +95,7 @@ describe("OmpRule", () => {
     expect(parsedTriggered.frontmatter).toMatchObject({
       condition: ["dangerous\\("],
       astCondition: ["console.log($$$ARGS)"],
-      scope: ["text", "tool:edit(src/**/*.ts)"],
+      scope: ["tool:edit(src/**/*.ts)"],
       interruptMode: "always",
       globs: ["src/**/*.ts"],
       rulesyncManaged: OMP_TTSR_MANAGED,
@@ -151,6 +155,27 @@ describe("OmpRule", () => {
         rules: [makeRule("one/shared.md"), makeRule("two/shared.md")],
       }),
     ).toThrow("basename collision");
+  });
+  it("rejects glob-gated regex triggers that can match prose", () => {
+    const rule = new RulesyncRule({
+      outputRoot: testDir,
+      relativeDirPath: ".rulesync/rules",
+      relativeFilePath: "unreachable.md",
+      frontmatter: {
+        targets: ["omp"],
+        condition: ["dangerous"],
+        scope: ["text"],
+        globs: ["src/**/*.ts"],
+      },
+      body: "Unreachable",
+    });
+    expect(() =>
+      buildOmpRuleStoreFiles({
+        outputRoot: testDir,
+        global: false,
+        rules: [OmpRule.fromRulesyncRule({ outputRoot: testDir, rulesyncRule: rule })],
+      }),
+    ).toThrow("OMP TTSR rule globs require tool-only scope");
   });
 
   it("ports the complete restricted glob grammar", () => {
@@ -240,6 +265,7 @@ describe("OmpRule", () => {
     expect(extension).toContain('path.join(agentDir, "rulesync-rules")');
     expect(extension).toContain("if (count === 0) systemPrompt.push(rule.body)");
     expect(extension).toContain("else if (count > 1) api.logger.error");
-    expect(extension).toContain("const result = [...globalRules, ...projectRules]");
+    expect(extension).toContain("const result = [...(globalRules ?? []), ...(projectRules ?? [])]");
+    expect(extension).toContain("if (globalRules !== null && projectRules !== null) cache.set");
   });
 });

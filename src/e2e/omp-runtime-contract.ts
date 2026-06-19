@@ -53,6 +53,7 @@ interface ContractResult {
   skills: SkillEntry[];
   ttsr: {
     name: string;
+    globalName: string;
     condition: string[];
     scope: string[];
     interruptMode: string | null;
@@ -229,14 +230,13 @@ async function main(): Promise<void> {
   const nested = await runRules(args.nested);
   const moved = await runRules(args["other-checkout"]);
   process.chdir(args.checkout);
-  const ttsrRules = await loadCapability<Rule>("rules", {
-    cwd: args.checkout,
-    providers: ["agents"],
-  });
-  const ttsrRule = ttsrRules.items.find((rule: Rule) =>
-    rule.condition?.includes("DANGEROUS_CALL"),
-  );
+  const ttsrRules = await loadCapability<Rule>("rules", { cwd: args.checkout });
+  const ttsrRule = ttsrRules.items.find((rule: Rule) => rule.condition?.includes("DANGEROUS_CALL"));
   if (!ttsrRule) throw new Error("Rulesync TTSR rule not discovered");
+  const globalTtsrRule = ttsrRules.items.find((rule: Rule) =>
+    rule.condition?.includes("GLOBAL_DANGEROUS_CALL"),
+  );
+  if (!globalTtsrRule) throw new Error("Rulesync global TTSR rule not discovered");
 
   process.chdir(args.checkout);
   const { agents: discoveredAgents } = await discoverAgents(args.checkout, args.home);
@@ -291,6 +291,7 @@ async function main(): Promise<void> {
     ],
     ttsr: {
       name: ttsrRule.name,
+      globalName: globalTtsrRule.name,
       condition: ttsrRule.condition ?? [],
       scope: ttsrRule.scope ?? [],
       interruptMode: ttsrRule.interruptMode ?? null,
