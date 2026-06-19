@@ -4,6 +4,8 @@ import { mkdir, readFile, readdir, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
+import "../version.js";
+
 import type { Rule } from "@oh-my-pi/pi-coding-agent/capability/rule";
 import type { SlashCommand } from "@oh-my-pi/pi-coding-agent/capability/slash-command";
 import type { ExtensionError } from "@oh-my-pi/pi-coding-agent/extensibility/extensions/types";

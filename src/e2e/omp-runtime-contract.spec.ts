@@ -264,4 +264,53 @@ describe("OMP runtime contract", () => {
     expect(occurrenceCount(result.root, PROJECT_RULE)).toBe(1);
     expect(result.diagnostics).toEqual([]);
   });
+
+  it("reports one diagnostic and injects nothing from a malformed project store", async () => {
+    const home = await temporaryDirectory("omp-malformed-home");
+    const source = await temporaryDirectory("omp-malformed-source");
+    const globalSource = await temporaryDirectory("omp-malformed-global-source");
+    const checkout = await temporaryDirectory("omp-malformed-checkout");
+    const otherCheckout = await temporaryDirectory("omp-malformed-other");
+    await Promise.all([
+      writeSource(source, "project"),
+      writeSource(globalSource, "global"),
+      initializeCheckout(checkout),
+      initializeCheckout(otherCheckout),
+    ]);
+    await runOmpGenerate({
+      target: "omp",
+      features: "rules,commands,skills,subagents",
+      global: true,
+      inputRoot: globalSource,
+      env: { HOME: home },
+    });
+    const previousCwd = process.cwd();
+    process.chdir(checkout);
+    try {
+      await runOmpGenerate({
+        target: "omp",
+        features: "rules,commands,skills,subagents",
+        inputRoot: source,
+        env: { HOME: home },
+      });
+    } finally {
+      process.chdir(previousCwd);
+    }
+    const markerPath = join(checkout, ".omp", "rulesync-rules", ".rulesync-store-v1.json");
+    const marker = JSON.parse(await readFile(markerPath, "utf8")) as {
+      rules: Array<{ sha256: string }>;
+    };
+    marker.rules[0]!.sha256 = "0".repeat(64);
+    await writeFile(markerPath, `${JSON.stringify(marker)}\n`);
+
+    const result = await runContract({
+      home,
+      checkout,
+      nested: join(checkout, "src", "nested"),
+      otherCheckout,
+    });
+    expect(occurrenceCount(result.root, PROJECT_RULE)).toBe(0);
+    expect(result.diagnostics).toHaveLength(1);
+    expect(result.diagnostics[0]).toContain("Rulesync OMP project rule store rejected");
+  });
 });
