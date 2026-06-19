@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import { ValidationResult } from "../../types/ai-file.js";
 import { ToolFile } from "../../types/tool-file.js";
 import { readFileContent } from "../../utils/file.js";
+import { stringifyFrontmatter } from "../../utils/frontmatter.js";
 import { RULESYNC_FORK_COMMIT } from "../../version.js";
 import { RulesyncRule } from "./rulesync-rule.js";
 import {
@@ -12,20 +13,44 @@ import {
   ToolRuleForDeletionParams,
   ToolRuleFromFileParams,
   ToolRuleFromRulesyncRuleParams,
+  ToolRuleParams,
 } from "./tool-rule.js";
 
 export const OMP_RULES_DIR = join(".omp", "rulesync-rules");
 export const OMP_GLOBAL_RULES_DIR = join(".omp", "agent", "rulesync-rules");
 export const OMP_RULES_MARKER = ".rulesync-store-v1.json";
 export const OMP_RULES_EXTENSION = join(".omp", "agent", "extensions", "rulesync-project-rules.ts");
+export const OMP_TTSR_RULES_DIR = join(".agents", "rules");
+export const OMP_GLOBAL_TTSR_RULES_DIR = join(".omp", "agent", "rules");
+export const OMP_TTSR_RULE_PREFIX = "rulesync-";
+export const OMP_TTSR_MANAGED = "rulesync-omp-ttsr-v1";
 
 export type OmpRuleSettablePaths = {
   root?: undefined;
   nonRoot: { relativeDirPath: string };
 };
 
-/** OMP rules are body-only files in a private Rulesync-owned store. */
+type OmpRuleParams = ToolRuleParams & {
+  condition?: string[];
+  astCondition?: string[];
+  scope?: string[];
+  interruptMode?: "never" | "prose-only" | "tool-only" | "always";
+};
+
+/** OMP rules are private-store files unless native TTSR discovery is required. */
 export class OmpRule extends ToolRule {
+  private readonly condition?: string[];
+  private readonly astCondition?: string[];
+  private readonly scope?: string[];
+  private readonly interruptMode?: "never" | "prose-only" | "tool-only" | "always";
+
+  constructor({ condition, astCondition, scope, interruptMode, ...rest }: OmpRuleParams) {
+    super(rest);
+    this.condition = condition;
+    this.astCondition = astCondition;
+    this.scope = scope;
+    this.interruptMode = interruptMode;
+  }
   static getSettablePaths({
     global = false,
     excludeToolDir,
@@ -82,6 +107,10 @@ export class OmpRule extends ToolRule {
       root: rulesyncRule.getFrontmatter().root ?? false,
       description: rulesyncRule.getFrontmatter().description,
       globs: rulesyncRule.getFrontmatter().globs,
+      condition: rulesyncRule.getFrontmatter().condition,
+      astCondition: rulesyncRule.getFrontmatter().astCondition,
+      scope: rulesyncRule.getFrontmatter().scope,
+      interruptMode: rulesyncRule.getFrontmatter().interruptMode,
     });
   }
 
@@ -110,6 +139,22 @@ export class OmpRule extends ToolRule {
     return { success: true, error: null };
   }
 
+  hasTtsrCondition(): boolean {
+    return Boolean(this.condition?.length || this.astCondition?.length);
+  }
+
+  getTtsrFrontmatter(): Record<string, unknown> {
+    return {
+      condition: this.condition,
+      astCondition: this.astCondition,
+      scope: this.scope,
+      interruptMode: this.interruptMode,
+      description: this.getDescription(),
+      globs: this.getGlobs(),
+      rulesyncManaged: OMP_TTSR_MANAGED,
+    };
+  }
+
   static isTargetedByRulesyncRule(rulesyncRule: RulesyncRule): boolean {
     return this.isTargetedByRulesyncRuleDefault({ rulesyncRule, toolTarget: "omp" });
   }
@@ -130,6 +175,15 @@ class OmpGeneratedFile extends ToolFile {
 
 export function emittedContent(content: string): string {
   return `${content.trimEnd()}\n`;
+}
+export function isManagedOmpTtsrContent(content: string): boolean {
+  if (!content.startsWith("---\n")) return false;
+  const end = content.indexOf("\n---", 4);
+  if (end === -1) return false;
+  return content
+    .slice(4, end)
+    .split("\n")
+    .some((line) => line === `rulesyncManaged: ${OMP_TTSR_MANAGED}`);
 }
 
 function utf8Compare(left: string, right: string): number {
@@ -229,11 +283,16 @@ export function buildOmpRuleStoreFiles({
     utf8Compare(left.getRelativeFilePath(), right.getRelativeFilePath()),
   );
   for (const rule of sortedRules) {
-    for (const glob of rule.isRoot() ? [] : (rule.getGlobs() ?? [])) {
-      validateOmpRuleGlob(glob);
-    }
+    const globs = rule.hasTtsrCondition()
+      ? (rule.getGlobs() ?? [])
+      : rule.isRoot()
+        ? []
+        : (rule.getGlobs() ?? []);
+    for (const glob of globs) validateOmpRuleGlob(glob);
   }
-  const markerRules: OmpStoreRule[] = sortedRules.map((rule) => {
+  const privateRules = sortedRules.filter((rule) => !rule.hasTtsrCondition());
+  const ttsrRules = sortedRules.filter((rule) => rule.hasTtsrCondition());
+  const markerRules: OmpStoreRule[] = privateRules.map((rule) => {
     const body = emittedContent(rule.getFileContent());
     rule.setFileContent(body);
     return {
@@ -244,6 +303,19 @@ export function buildOmpRuleStoreFiles({
     };
   });
   const storeDir = OmpRule.getSettablePaths({ global }).nonRoot.relativeDirPath;
+  const ttsrDir = global ? OMP_GLOBAL_TTSR_RULES_DIR : OMP_TTSR_RULES_DIR;
+  const ttsrFiles = ttsrRules.map(
+    (rule) =>
+      new OmpGeneratedFile({
+        outputRoot,
+        relativeDirPath: ttsrDir,
+        relativeFilePath: `${OMP_TTSR_RULE_PREFIX}${rule.getRelativeFilePath()}`,
+        fileContent: emittedContent(
+          stringifyFrontmatter(rule.getFileContent(), rule.getTtsrFrontmatter()),
+        ),
+        global,
+      }),
+  );
   const marker = {
     version: 1,
     contract: "rulesync-project-rules-v1",
@@ -260,7 +332,8 @@ export function buildOmpRuleStoreFiles({
       fileContent: `${JSON.stringify(marker)}\n`,
       global,
     }),
-    ...sortedRules,
+    ...privateRules,
+    ...ttsrFiles,
   ];
 
   if (global) {

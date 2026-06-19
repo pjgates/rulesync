@@ -25,6 +25,7 @@ interface ContractResult {
   agents: Array<{ name: string; scope: string; source: string }>;
   commands: Array<{ name: string; scope: string; source: string; expanded: string }>;
   skills: Array<{ name: string; scope: string; source: string; supportAssetSha256: string }>;
+  ttsr: { name: string; condition: string[]; scope: string[]; interruptMode: string | null };
   diagnostics: string[];
 }
 
@@ -68,6 +69,12 @@ async function writeSource(root: string, scope: "global" | "project"): Promise<v
     join(source, "subagents", "contract-agent.md"),
     `---\nname: contract-agent\ndescription: ${prefix} agent\nroot: ${scope === "global"}\ntargets: [omp]\n---\n${prefix} agent body.\n`,
   );
+  if (scope === "project") {
+    await writeFile(
+      join(source, "rules", "triggered.md"),
+      `---\ntargets: [omp]\ndescription: Project triggered rule\ncondition: [DANGEROUS_CALL]\nscope: [text]\ninterruptMode: always\n---\nTriggered runtime rule.\n`,
+    );
+  }
 }
 
 async function initializeCheckout(path: string): Promise<void> {
@@ -181,8 +188,8 @@ describe("OMP runtime contract", () => {
 
     expect(result.version).toBe("16.0.9");
     expect(result.agentDir).toBe(await realpath(join(home, ".omp", "agent")));
-    expect(occurrenceCount(result.root, GLOBAL_RULE), JSON.stringify(result)).toBe(1);
-    expect(occurrenceCount(result.root, PROJECT_RULE), JSON.stringify(result.root)).toBe(1);
+    expect(occurrenceCount(result.root, GLOBAL_RULE)).toBe(1);
+    expect(occurrenceCount(result.root, PROJECT_RULE)).toBe(1);
     expect(occurrenceCount(result.nested, GLOBAL_RULE)).toBe(1);
     expect(occurrenceCount(result.nested, PROJECT_RULE)).toBe(1);
     expect(occurrenceCount(result.moved, GLOBAL_RULE)).toBe(1);
@@ -215,6 +222,12 @@ describe("OMP runtime contract", () => {
           .digest("hex"),
       },
     ]);
+    expect(result.ttsr).toEqual({
+      name: "rulesync-triggered",
+      condition: ["DANGEROUS_CALL"],
+      scope: ["text"],
+      interruptMode: "always",
+    });
     expect(result.diagnostics).toEqual([]);
   });
 

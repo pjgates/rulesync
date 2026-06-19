@@ -23,6 +23,10 @@ export const RulesyncRuleFrontmatterSchema = z.object({
   targets: z._default(RulesyncTargetsSchema, ["*"]),
   description: z.optional(z.string()),
   globs: z.optional(z.array(z.string())),
+  condition: z.optional(z.array(z.string())),
+  astCondition: z.optional(z.array(z.string())),
+  scope: z.optional(z.array(z.string())),
+  interruptMode: z.optional(z.enum(["never", "prose-only", "tool-only", "always"])),
   agentsmd: z.optional(
     z.looseObject({
       // @example "path/to/subproject"

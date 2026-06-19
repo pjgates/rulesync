@@ -4,16 +4,20 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setupTestDirectory } from "../../test-utils/test-directories.js";
+import { parseFrontmatter } from "../../utils/frontmatter.js";
 import { RULESYNC_FORK_COMMIT } from "../../version.js";
 import {
   OMP_GLOBAL_RULES_DIR,
   OMP_RULES_DIR,
   OMP_RULES_MARKER,
+  OMP_TTSR_MANAGED,
+  OMP_TTSR_RULES_DIR,
   OmpRule,
   buildOmpRuleStoreFiles,
   extractOmpRuleCandidates,
   ompRuleGlobMatches,
   ompRulesExtensionSource,
+  isManagedOmpTtsrContent,
   validateOmpRuleGlob,
 } from "./omp-rule.js";
 import { RulesyncRule } from "./rulesync-rule.js";
@@ -38,7 +42,7 @@ describe("OmpRule", () => {
     );
   });
 
-  it("emits body-only rules and a canonical marker in UTF-8 path order", () => {
+  it("emits private rules, native TTSR rules, and a canonical marker", () => {
     const root = new RulesyncRule({
       outputRoot: testDir,
       relativeDirPath: ".rulesync/rules",
@@ -53,10 +57,25 @@ describe("OmpRule", () => {
       frontmatter: { targets: ["omp"], description: "TS", globs: ["src/**/*.ts"] },
       body: "TypeScript body",
     });
+    const triggered = new RulesyncRule({
+      outputRoot: testDir,
+      relativeDirPath: ".rulesync/rules",
+      relativeFilePath: "b-triggered.md",
+      frontmatter: {
+        targets: ["omp"],
+        description: "Triggered",
+        globs: ["src/**/*.ts"],
+        condition: ["dangerous\\("],
+        astCondition: ["console.log($$$ARGS)"],
+        scope: ["text", "tool:edit(src/**/*.ts)"],
+        interruptMode: "always",
+      },
+      body: "Triggered body",
+    });
     const files = buildOmpRuleStoreFiles({
       outputRoot: testDir,
       global: false,
-      rules: [root, conditional].map((rulesyncRule) =>
+      rules: [root, conditional, triggered].map((rulesyncRule) =>
         OmpRule.fromRulesyncRule({ outputRoot: testDir, rulesyncRule }),
       ),
     });
@@ -64,6 +83,19 @@ describe("OmpRule", () => {
 
     expect(byName.get("z-root.md")?.getFileContent()).toBe("Root body\n");
     expect(byName.get("a-typescript.md")?.getFileContent()).toBe("TypeScript body\n");
+    const triggeredFile = byName.get("rulesync-b-triggered.md");
+    expect(triggeredFile?.getRelativeDirPath()).toBe(OMP_TTSR_RULES_DIR);
+    expect(isManagedOmpTtsrContent(triggeredFile!.getFileContent())).toBe(true);
+    const parsedTriggered = parseFrontmatter(triggeredFile!.getFileContent());
+    expect(parsedTriggered.body).toBe("Triggered body\n");
+    expect(parsedTriggered.frontmatter).toMatchObject({
+      condition: ["dangerous\\("],
+      astCondition: ["console.log($$$ARGS)"],
+      scope: ["text", "tool:edit(src/**/*.ts)"],
+      interruptMode: "always",
+      globs: ["src/**/*.ts"],
+      rulesyncManaged: OMP_TTSR_MANAGED,
+    });
     const markerText = byName.get(OMP_RULES_MARKER)?.getFileContent();
     expect(markerText?.endsWith("\n")).toBe(true);
     const marker = JSON.parse(markerText!);
@@ -80,6 +112,7 @@ describe("OmpRule", () => {
       "a-typescript.md",
       "z-root.md",
     ]);
+    expect(marker.rules.map((rule: { path: string }) => rule.path)).not.toContain("b-triggered.md");
     expect(marker.rules[0]).toEqual({
       path: "a-typescript.md",
       sha256: createHash("sha256").update("TypeScript body\n").digest("hex"),

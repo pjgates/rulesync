@@ -62,6 +62,10 @@ async function processFeatureGeneration<T extends AiFile>(params: {
   totalCount += writeResult.count;
   allPaths.push(...writeResult.paths);
   if (writeResult.count > 0) hasDiff = true;
+  const reconcileResult = await processor.reconcileManagedFiles(toolFiles);
+  totalCount += reconcileResult.count;
+  allPaths.push(...reconcileResult.paths);
+  if (reconcileResult.count > 0) hasDiff = true;
 
   if (config.getDelete()) {
     const existingToolFiles = await processor.loadToolFiles({ forDeletion: true });

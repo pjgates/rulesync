@@ -8,7 +8,7 @@ import {
   RULESYNC_OVERVIEW_FILE_NAME,
   RULESYNC_RULES_RELATIVE_DIR_PATH,
 } from "../constants/rulesync-paths.js";
-import { readFileContent, writeFileContent } from "../utils/file.js";
+import { fileExists, readFileContent, writeFileContent } from "../utils/file.js";
 import {
   runGenerate,
   runImport,
@@ -186,6 +186,35 @@ This is a test rule for E2E testing.
       await readFileContent(join(testDir, ".omp", "rulesync-rules", ".rulesync-store-v1.json")),
     );
     expect(marker.rules).toEqual([]);
+  });
+  it("reconciles only Rulesync-owned native OMP TTSR rules", async () => {
+    const testDir = getTestDir();
+    const sourcePath = join(testDir, RULESYNC_RULES_RELATIVE_DIR_PATH, "triggered.md");
+    await writeFileContent(
+      sourcePath,
+      `---\ntargets: ["omp"]\ndescription: "Triggered"\ncondition: ["DANGEROUS_CALL"]\n---\nTriggered body\n`,
+    );
+
+    await runGenerate({ target: "omp", features: "rules" });
+    const managedOutput = join(testDir, ".agents", "rules", "rulesync-triggered.md");
+    expect(await readFileContent(managedOutput)).toContain("rulesyncManaged: rulesync-omp-ttsr-v1");
+    const unmanagedOutput = join(testDir, ".agents", "rules", "rulesync-personal.md");
+    await writeFileContent(unmanagedOutput, "Personal rule\n");
+
+    await rm(sourcePath);
+    await expect(
+      runGenerate({
+        target: "omp",
+        features: "rules",
+        check: true,
+        env: { NODE_ENV: "e2e" },
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+    expect(await fileExists(managedOutput)).toBe(true);
+
+    await runGenerate({ target: "omp", features: "rules" });
+    expect(await fileExists(managedOutput)).toBe(false);
+    expect(await readFileContent(unmanagedOutput)).toBe("Personal rule\n");
   });
 
   it("should write BOTH instructions (rules) and mcp into a single kilo.jsonc when generating rules+mcp together", async () => {

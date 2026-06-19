@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 
 import { encode } from "@toon-format/toon";
@@ -16,7 +17,13 @@ import { RulesyncFile } from "../../types/rulesync-file.js";
 import { ToolFile } from "../../types/tool-file.js";
 import { ToolTarget } from "../../types/tool-targets.js";
 import { formatError } from "../../utils/error.js";
-import { checkPathTraversal, findFilesByGlobs, toPosixPath } from "../../utils/file.js";
+import {
+  checkPathTraversal,
+  findFilesByGlobs,
+  readFileContent,
+  removeFile,
+  toPosixPath,
+} from "../../utils/file.js";
 import type { Logger } from "../../utils/logger.js";
 import { AgentsmdCommand } from "../commands/agentsmd-command.js";
 import { CommandsProcessor } from "../commands/commands-processor.js";
@@ -55,7 +62,14 @@ import { KiloRule } from "./kilo-rule.js";
 import { KiroCliRule } from "./kiro-cli-rule.js";
 import { KiroIdeRule } from "./kiro-ide-rule.js";
 import { KiroRule } from "./kiro-rule.js";
-import { OmpRule, buildOmpRuleStoreFiles } from "./omp-rule.js";
+import {
+  OMP_GLOBAL_TTSR_RULES_DIR,
+  OMP_TTSR_RULE_PREFIX,
+  OMP_TTSR_RULES_DIR,
+  OmpRule,
+  buildOmpRuleStoreFiles,
+  isManagedOmpTtsrContent,
+} from "./omp-rule.js";
 import { OpenCodeRule } from "./opencode-rule.js";
 import { PiRule } from "./pi-rule.js";
 import { QwencodeRule } from "./qwencode-rule.js";
@@ -782,6 +796,33 @@ export class RulesProcessor extends FeatureProcessor {
 
   requiresOutputForEmptyRules(): boolean {
     return this.toolTarget === "omp";
+  }
+  async reconcileManagedFiles(generatedFiles: ToolFile[]): Promise<{
+    count: number;
+    paths: string[];
+  }> {
+    if (this.toolTarget !== "omp") return { count: 0, paths: [] };
+
+    const relativeDirPath = this.global ? OMP_GLOBAL_TTSR_RULES_DIR : OMP_TTSR_RULES_DIR;
+    const directory = join(this.outputRoot, relativeDirPath);
+    const expected = new Set(
+      generatedFiles
+        .filter((file) => file.getRelativeDirPath() === relativeDirPath)
+        .map((file) => file.getFilePath()),
+    );
+    const candidates = await findFilesByGlobs([join(directory, `${OMP_TTSR_RULE_PREFIX}*.md`)]);
+    const paths: string[] = [];
+    for (const pathname of candidates) {
+      if (expected.has(pathname)) continue;
+      const metadata = await lstat(pathname);
+      if (metadata.isSymbolicLink() || !metadata.isFile()) continue;
+      const content = await readFileContent(pathname);
+      if (!isManagedOmpTtsrContent(content)) continue;
+      if (this.dryRun) this.logger.info(`[DRY RUN] Would delete: ${pathname}`);
+      else await removeFile(pathname);
+      paths.push(toPosixPath(relative(process.cwd(), pathname)));
+    }
+    return { count: paths.length, paths };
   }
 
   async convertRulesyncFilesToToolFiles(rulesyncFiles: RulesyncFile[]): Promise<ToolFile[]> {

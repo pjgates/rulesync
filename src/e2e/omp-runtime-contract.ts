@@ -51,6 +51,12 @@ interface ContractResult {
   agents: LocatedEntry[];
   commands: CommandEntry[];
   skills: SkillEntry[];
+  ttsr: {
+    name: string;
+    condition: string[];
+    scope: string[];
+    interruptMode: string | null;
+  };
   diagnostics: string[];
 }
 
@@ -222,6 +228,15 @@ async function main(): Promise<void> {
   const root = await runRules(args.checkout);
   const nested = await runRules(args.nested);
   const moved = await runRules(args["other-checkout"]);
+  process.chdir(args.checkout);
+  const ttsrRules = await loadCapability<Rule>("rules", {
+    cwd: args.checkout,
+    providers: ["agents"],
+  });
+  const ttsrRule = ttsrRules.items.find((rule: Rule) =>
+    rule.condition?.includes("DANGEROUS_CALL"),
+  );
+  if (!ttsrRule) throw new Error("Rulesync TTSR rule not discovered");
 
   process.chdir(args.checkout);
   const { agents: discoveredAgents } = await discoverAgents(args.checkout, args.home);
@@ -274,6 +289,12 @@ async function main(): Promise<void> {
         supportAssetSha256: await sha256(supportAsset),
       },
     ],
+    ttsr: {
+      name: ttsrRule.name,
+      condition: ttsrRule.condition ?? [],
+      scope: ttsrRule.scope ?? [],
+      interruptMode: ttsrRule.interruptMode ?? null,
+    },
     diagnostics: Array.from(
       new Set([
         ...extensionDiagnostics,
