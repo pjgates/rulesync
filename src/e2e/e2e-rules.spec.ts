@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -7,7 +8,7 @@ import {
   RULESYNC_OVERVIEW_FILE_NAME,
   RULESYNC_RULES_RELATIVE_DIR_PATH,
 } from "../constants/rulesync-paths.js";
-import { readFileContent, writeFileContent } from "../utils/file.js";
+import { fileExists, readFileContent, writeFileContent } from "../utils/file.js";
 import {
   runGenerate,
   runImport,
@@ -41,6 +42,7 @@ describe("E2E: rules", () => {
     { target: "warp", outputPath: "AGENTS.md" },
     { target: "replit", outputPath: "replit.md" },
     { target: "pi", outputPath: "AGENTS.md" },
+    { target: "omp", outputPath: join(".omp", "rulesync-rules", "overview.md") },
     { target: "zed", outputPath: ".rules" },
     { target: "vibe", outputPath: "AGENTS.md" },
   ])("should generate $target rules", async ({ target, outputPath }) => {
@@ -164,6 +166,55 @@ This is a test rule for E2E testing.
     expect(stderr).toBe("");
     expect(stdout.match(/All files are up to date\./g)).toHaveLength(1);
     expect(stdout).not.toContain("All files are up to date (rules)");
+  });
+  it("keeps removed OMP rule bodies under ordinary non-delete generation", async () => {
+    const testDir = getTestDir();
+    const sourcePath = join(testDir, RULESYNC_RULES_RELATIVE_DIR_PATH, "stale.md");
+    await writeFileContent(
+      sourcePath,
+      `---\ntargets: ["omp"]\ndescription: "Stale"\n---\nStale body\n`,
+    );
+
+    await runGenerate({ target: "omp", features: "rules" });
+    const staleOutput = join(testDir, ".omp", "rulesync-rules", "stale.md");
+    expect(await readFileContent(staleOutput)).toBe("Stale body\n");
+
+    await rm(sourcePath);
+    await runGenerate({ target: "omp", features: "rules" });
+    expect(await readFileContent(staleOutput)).toBe("Stale body\n");
+    const marker = JSON.parse(
+      await readFileContent(join(testDir, ".omp", "rulesync-rules", ".rulesync-store-v1.json")),
+    );
+    expect(marker.rules).toEqual([]);
+  });
+  it("reconciles only Rulesync-owned native OMP TTSR rules", async () => {
+    const testDir = getTestDir();
+    const sourcePath = join(testDir, RULESYNC_RULES_RELATIVE_DIR_PATH, "triggered.md");
+    await writeFileContent(
+      sourcePath,
+      `---\ntargets: ["omp"]\ndescription: "Triggered"\ncondition: ["DANGEROUS_CALL"]\n---\nTriggered body\n`,
+    );
+
+    await runGenerate({ target: "omp", features: "rules" });
+    const managedOutput = join(testDir, ".agents", "rules", "rulesync-triggered.md");
+    expect(await readFileContent(managedOutput)).toContain("rulesyncManaged: rulesync-omp-ttsr-v1");
+    const unmanagedOutput = join(testDir, ".agents", "rules", "rulesync-personal.md");
+    await writeFileContent(unmanagedOutput, "Personal rule\n");
+
+    await rm(sourcePath);
+    await expect(
+      runGenerate({
+        target: "omp",
+        features: "rules",
+        check: true,
+        env: { NODE_ENV: "e2e" },
+      }),
+    ).rejects.toMatchObject({ code: 1 });
+    expect(await fileExists(managedOutput)).toBe(true);
+
+    await runGenerate({ target: "omp", features: "rules" });
+    expect(await fileExists(managedOutput)).toBe(false);
+    expect(await readFileContent(unmanagedOutput)).toBe("Personal rule\n");
   });
 
   it("should write BOTH instructions (rules) and mcp into a single kilo.jsonc when generating rules+mcp together", async () => {
@@ -349,6 +400,7 @@ describe("E2E: rules (global mode)", () => {
     { target: "rovodev", outputPath: join(".rovodev", "AGENTS.md") },
     { target: "takt", outputPath: join(".takt", "facets", "policies", "overview.md") },
     { target: "pi", outputPath: join(".pi", "agent", "AGENTS.md") },
+    { target: "omp", outputPath: join(".omp", "agent", "rulesync-rules", "overview.md") },
     { target: "zed", outputPath: join(".config", "zed", "AGENTS.md") },
     { target: "vibe", outputPath: join(".vibe", "AGENTS.md") },
     { target: "augmentcode", outputPath: join(".augment", "rules", "overview.md") },

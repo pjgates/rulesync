@@ -572,6 +572,10 @@ This has leading and trailing whitespace.
         targets: ["copilot", "cursor"],
         description: "Test description",
         globs: ["*.ts", "*.js"],
+        condition: ["dangerous\\("],
+        astCondition: ["console.log($$$ARGS)"],
+        scope: ["text", "tool:edit(src/**/*.ts)"],
+        interruptMode: "always",
         cursor: {
           alwaysApply: false,
           description: "Cursor desc",
@@ -675,6 +679,14 @@ This has leading and trailing whitespace.
         globs: "not-array",
       });
       expect(result.success).toBe(false);
+    });
+    it("should reject invalid OMP TTSR metadata", () => {
+      expect(RulesyncRuleFrontmatterSchema.safeParse({ condition: "not-array" }).success).toBe(
+        false,
+      );
+      expect(RulesyncRuleFrontmatterSchema.safeParse({ interruptMode: "sometimes" }).success).toBe(
+        false,
+      );
     });
 
     it("should validate cursor configuration", () => {

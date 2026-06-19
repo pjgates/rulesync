@@ -986,6 +986,7 @@ Second global content`;
       expect(toolTargets).toContain("opencode");
       expect(toolTargets).toContain("cursor");
       expect(toolTargets).toContain("codexcli");
+      expect(toolTargets).toContain("omp");
     });
 
     it("should exclude simulated targets when includeSimulated is false", () => {
@@ -998,6 +999,7 @@ Second global content`;
       expect(toolTargets).toContain("opencode");
       expect(toolTargets).toContain("cursor");
       expect(toolTargets).toContain("codexcli");
+      expect(toolTargets).toContain("omp");
     });
 
     it("should include simulated targets when includeSimulated is true", () => {
@@ -1010,6 +1012,7 @@ Second global content`;
       expect(toolTargets).toContain("cursor");
       expect(toolTargets).toContain("codexcli");
       expect(toolTargets).toContain("opencode");
+      expect(toolTargets).toContain("omp");
       expect(toolTargets).toEqual(subagentsProcessorToolTargets);
     });
 
@@ -1039,6 +1042,7 @@ Second global content`;
         "junie",
         "kilo",
         "opencode",
+        "omp",
         "qwencode",
         "rovodev",
         "takt",
@@ -1092,6 +1096,7 @@ Second global content`;
           "kiro-cli",
           "kiro-ide",
           "opencode",
+          "omp",
           "qwencode",
           "roo",
           "rovodev",

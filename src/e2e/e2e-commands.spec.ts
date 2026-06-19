@@ -30,6 +30,7 @@ describe("E2E: commands", () => {
     { target: "junie", outputPath: join(".junie", "commands", "review-pr.md") },
     { target: "takt", outputPath: join(".takt", "facets", "instructions", "review-pr.md") },
     { target: "pi", outputPath: join(".pi", "prompts", "review-pr.md") },
+    { target: "omp", outputPath: join(".omp", "commands", "review-pr.md") },
     { target: "devin", outputPath: join(".devin", "workflows", "review-pr.md") },
     { target: "factorydroid", outputPath: join(".factory", "commands", "review-pr.md") },
     { target: "goose", outputPath: join(".goose", "recipes", "review-pr.yaml") },
@@ -85,6 +86,17 @@ Check the PR diff and provide feedback.
     },
   );
 
+  it("should preserve stale OMP outputs unless delete is explicitly enabled", async () => {
+    const testDir = getTestDir();
+    const stalePath = join(testDir, ".omp", "commands", "stale.md");
+    await writeFileContent(join(testDir, ".rulesync", ".gitkeep"), "");
+    await writeFileContent(stalePath, "# stale\n");
+
+    await runGenerate({ target: "omp", features: "commands" });
+
+    expect(await readFileContent(stalePath)).toBe("# stale\n");
+  });
+
   it.each([
     { target: "claudecode", orphanPath: join(".claude", "commands", "orphan.md") },
     { target: "cursor", orphanPath: join(".cursor", "commands", "orphan.md") },
@@ -100,6 +112,7 @@ Check the PR diff and provide feedback.
     { target: "antigravity-ide", orphanPath: join(".agents", "workflows", "orphan.md") },
     { target: "junie", orphanPath: join(".junie", "commands", "orphan.md") },
     { target: "pi", orphanPath: join(".pi", "prompts", "orphan.md") },
+    { target: "omp", orphanPath: join(".omp", "commands", "orphan.md") },
     { target: "devin", orphanPath: join(".devin", "workflows", "orphan.md") },
     { target: "factorydroid", orphanPath: join(".factory", "commands", "orphan.md") },
     { target: "goose", orphanPath: join(".goose", "recipes", "orphan.yaml") },
@@ -148,6 +161,7 @@ describe("E2E: commands (import)", () => {
     { target: "antigravity-ide", sourcePath: join(".agents", "workflows", "review-pr.md") },
     { target: "junie", sourcePath: join(".junie", "commands", "review-pr.md") },
     { target: "pi", sourcePath: join(".pi", "prompts", "review-pr.md") },
+    { target: "omp", sourcePath: join(".omp", "commands", "review-pr.md") },
     { target: "devin", sourcePath: join(".devin", "workflows", "review-pr.md") },
     { target: "factorydroid", sourcePath: join(".factory", "commands", "review-pr.md") },
   ])("should import $target commands", async ({ target, sourcePath }) => {
@@ -206,6 +220,7 @@ describe("E2E: commands (global mode)", () => {
       outputPath: join(".takt", "facets", "instructions", "review-pr.md"),
     },
     { target: "pi", outputPath: join(".pi", "agent", "prompts", "review-pr.md") },
+    { target: "omp", outputPath: join(".omp", "agent", "commands", "review-pr.md") },
     {
       target: "devin",
       outputPath: join(".codeium", "windsurf", "global_workflows", "review-pr.md"),

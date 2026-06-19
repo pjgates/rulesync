@@ -1,6 +1,6 @@
 {
   "name": "rulesync",
-  "version": "8.30.1",
+  "version": "8.30.1-omp.1",
   "description": "Unified AI rules management CLI tool that generates configuration files for various AI development tools",
   "keywords": [
     "ai",
@@ -12,13 +12,13 @@
     "development",
     "rules"
   ],
-  "homepage": "https://github.com/dyoshikawa/rulesync#readme",
+  "homepage": "https://github.com/pjgates/rulesync#readme",
   "bugs": {
-    "url": "https://github.com/dyoshikawa/rulesync/issues"
+    "url": "https://github.com/pjgates/rulesync/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dyoshikawa/rulesync.git"
+    "url": "https://github.com/pjgates/rulesync.git"
   },
   "license": "MIT",
   "author": "dyoshikawa",
@@ -46,6 +46,7 @@
   ],
   "scripts": {
     "build": "tsup src/cli/index.ts src/index.ts --format cjs,esm --dts --clean",
+    "build:release-assets": "bun scripts/build-release-assets.ts",
     "check": "pnpm run fmt:check && pnpm run oxlint && pnpm run typecheck",
     "check:sync-skill-docs": "tsx scripts/check-skill-docs-sync.ts",
     "cicheck": "pnpm run cicheck:code && pnpm run cicheck:content",
@@ -99,6 +100,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.173",
+    "@oh-my-pi/pi-coding-agent": "16.0.9",
     "@openrouter/sdk": "0.12.79",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.2",
     "@tsconfig/node24": "24.0.4",
@@ -128,6 +130,7 @@
     "node": ">=22.0.0",
     "pnpm": ">=10"
   },
+  "packageManager": "pnpm@11.8.0",
   "publishConfig": {
     "access": "public"
   }

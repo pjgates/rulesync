@@ -85,6 +85,9 @@ export abstract class FeatureProcessor {
 
     return { count: changedCount, paths: changedPaths };
   }
+  async reconcileManagedFiles(_generatedFiles: AiFile[]): Promise<WriteResult> {
+    return { count: 0, paths: [] };
+  }
 
   async removeAiFiles(aiFiles: AiFile[]): Promise<void> {
     for (const aiFile of aiFiles) {

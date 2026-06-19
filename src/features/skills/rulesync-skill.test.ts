@@ -525,6 +525,29 @@ This has leading and trailing whitespace.
       }
     });
 
+    it("should validate the exact omp provider block", () => {
+      const result = RulesyncSkillFrontmatterSchema.safeParse({
+        name: "omp-skill",
+        description: "OMP skill",
+        omp: {
+          "allowed-tools": ["read"],
+          "disable-model-invocation": true,
+          license: "MIT",
+          compatibility: "OMP 16+",
+          metadata: { author: "rulesync" },
+        },
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.omp?.compatibility).toBe("OMP 16+");
+      expect(
+        RulesyncSkillFrontmatterSchema.safeParse({
+          name: "bad",
+          description: "bad",
+          omp: { "allowed-tools": "read" },
+        }).success,
+      ).toBe(false);
+    });
+
     it("should validate frontmatter without claudecode field", () => {
       const frontmatter = {
         name: "simple-skill",

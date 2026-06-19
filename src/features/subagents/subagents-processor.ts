@@ -27,6 +27,7 @@ import { KiloSubagent } from "./kilo-subagent.js";
 import { KiroCliSubagent } from "./kiro-cli-subagent.js";
 import { KiroIdeSubagent } from "./kiro-ide-subagent.js";
 import { KiroSubagent } from "./kiro-subagent.js";
+import { OmpSubagent } from "./omp-subagent.js";
 import { OpenCodeSubagent } from "./opencode-subagent.js";
 import { QwencodeSubagent } from "./qwencode-subagent.js";
 import { RooSubagent } from "./roo-subagent.js";
@@ -101,6 +102,7 @@ const subagentsProcessorToolTargetTuple = [
   "kiro-cli",
   "kiro-ide",
   "opencode",
+  "omp",
   "qwencode",
   "roo",
   "rovodev",
@@ -287,6 +289,13 @@ export const toolSubagentFactories = new Map<SubagentsProcessorToolTarget, ToolS
     "opencode",
     {
       class: OpenCodeSubagent,
+      meta: { supportsSimulated: false, supportsGlobal: true, filePattern: "*.md" },
+    },
+  ],
+  [
+    "omp",
+    {
+      class: OmpSubagent,
       meta: { supportsSimulated: false, supportsGlobal: true, filePattern: "*.md" },
     },
   ],

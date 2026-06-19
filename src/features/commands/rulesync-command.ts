@@ -19,6 +19,11 @@ import { parseFrontmatter, stringifyFrontmatter } from "../../utils/frontmatter.
 export const RulesyncCommandFrontmatterSchema = z.looseObject({
   targets: z._default(RulesyncTargetsSchema, ["*"]),
   description: z.optional(z.string()),
+  omp: z.optional(
+    z.looseObject({
+      "argument-hint": z.optional(z.string()),
+    }),
+  ),
   takt: z.optional(
     z.looseObject({
       name: z.optional(z.string()),

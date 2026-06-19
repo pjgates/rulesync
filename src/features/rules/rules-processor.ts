@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 
 import { encode } from "@toon-format/toon";
@@ -16,7 +17,13 @@ import { RulesyncFile } from "../../types/rulesync-file.js";
 import { ToolFile } from "../../types/tool-file.js";
 import { ToolTarget } from "../../types/tool-targets.js";
 import { formatError } from "../../utils/error.js";
-import { checkPathTraversal, findFilesByGlobs, toPosixPath } from "../../utils/file.js";
+import {
+  checkPathTraversal,
+  findFilesByGlobs,
+  readFileContent,
+  removeFile,
+  toPosixPath,
+} from "../../utils/file.js";
 import type { Logger } from "../../utils/logger.js";
 import { AgentsmdCommand } from "../commands/agentsmd-command.js";
 import { CommandsProcessor } from "../commands/commands-processor.js";
@@ -55,6 +62,14 @@ import { KiloRule } from "./kilo-rule.js";
 import { KiroCliRule } from "./kiro-cli-rule.js";
 import { KiroIdeRule } from "./kiro-ide-rule.js";
 import { KiroRule } from "./kiro-rule.js";
+import {
+  OMP_GLOBAL_TTSR_RULES_DIR,
+  OMP_TTSR_RULE_PREFIX,
+  OMP_TTSR_RULES_DIR,
+  OmpRule,
+  buildOmpRuleStoreFiles,
+  isManagedOmpTtsrContent,
+} from "./omp-rule.js";
 import { OpenCodeRule } from "./opencode-rule.js";
 import { PiRule } from "./pi-rule.js";
 import { QwencodeRule } from "./qwencode-rule.js";
@@ -100,6 +115,7 @@ const rulesProcessorToolTargets: ToolTarget[] = [
   "kiro-cli",
   "kiro-ide",
   "opencode",
+  "omp",
   "pi",
   "qwencode",
   "replit",
@@ -539,6 +555,17 @@ export const toolRuleFactories = new Map<RulesProcessorToolTarget, ToolRuleFacto
     },
   ],
   [
+    "omp",
+    {
+      class: OmpRule,
+      meta: {
+        extension: "md",
+        supportsGlobal: true,
+        ruleDiscoveryMode: "auto",
+      },
+    },
+  ],
+  [
     "pi",
     {
       class: PiRule,
@@ -767,6 +794,37 @@ export class RulesProcessor extends FeatureProcessor {
     this.featureOptions = featureOptions;
   }
 
+  requiresOutputForEmptyRules(): boolean {
+    return this.toolTarget === "omp";
+  }
+  async reconcileManagedFiles(generatedFiles: ToolFile[]): Promise<{
+    count: number;
+    paths: string[];
+  }> {
+    if (this.toolTarget !== "omp") return { count: 0, paths: [] };
+
+    const relativeDirPath = this.global ? OMP_GLOBAL_TTSR_RULES_DIR : OMP_TTSR_RULES_DIR;
+    const directory = join(this.outputRoot, relativeDirPath);
+    const expected = new Set(
+      generatedFiles
+        .filter((file) => file.getRelativeDirPath() === relativeDirPath)
+        .map((file) => file.getFilePath()),
+    );
+    const candidates = await findFilesByGlobs([join(directory, `${OMP_TTSR_RULE_PREFIX}*.md`)]);
+    const paths: string[] = [];
+    for (const pathname of candidates) {
+      if (expected.has(pathname)) continue;
+      const metadata = await lstat(pathname);
+      if (metadata.isSymbolicLink() || !metadata.isFile()) continue;
+      const content = await readFileContent(pathname);
+      if (!isManagedOmpTtsrContent(content)) continue;
+      if (this.dryRun) this.logger.info(`[DRY RUN] Would delete: ${pathname}`);
+      else await removeFile(pathname);
+      paths.push(toPosixPath(relative(process.cwd(), pathname)));
+    }
+    return { count: paths.length, paths };
+  }
+
   async convertRulesyncFilesToToolFiles(rulesyncFiles: RulesyncFile[]): Promise<ToolFile[]> {
     const rulesyncRules = rulesyncFiles.filter(
       (file): file is RulesyncRule => file instanceof RulesyncRule,
@@ -779,19 +837,27 @@ export class RulesProcessor extends FeatureProcessor {
     const factory = this.getFactory(this.toolTarget);
     const { meta } = factory;
 
-    const toolRules = nonLocalRootRules
-      .map((rulesyncRule) => {
-        if (!factory.class.isTargetedByRulesyncRule(rulesyncRule)) {
-          return null;
+    const targetedRules = nonLocalRootRules.filter((rulesyncRule) =>
+      factory.class.isTargetedByRulesyncRule(rulesyncRule),
+    );
+    if (this.toolTarget === "omp") {
+      const basenames = new Set<string>();
+      for (const rulesyncRule of targetedRules) {
+        const name = basename(rulesyncRule.getRelativeFilePath());
+        if (basenames.has(name)) {
+          throw new Error(`OMP rule basename collision: '${name}'`);
         }
-        return factory.class.fromRulesyncRule({
-          outputRoot: this.outputRoot,
-          rulesyncRule,
-          validate: true,
-          global: this.global,
-        });
-      })
-      .filter((rule): rule is ToolRule => rule !== null);
+        basenames.add(name);
+      }
+    }
+    const toolRules = targetedRules.map((rulesyncRule) =>
+      factory.class.fromRulesyncRule({
+        outputRoot: this.outputRoot,
+        rulesyncRule,
+        validate: true,
+        global: this.global,
+      }),
+    );
 
     // Some tools read project rules only from a single root `AGENTS.md` file and
     // neither scan a `memories/` directory nor follow references out of it:
@@ -889,6 +955,13 @@ export class RulesProcessor extends FeatureProcessor {
       }
     }
 
+    if (this.toolTarget === "omp") {
+      return buildOmpRuleStoreFiles({
+        outputRoot: this.outputRoot,
+        global: this.global,
+        rules: toolRules as OmpRule[],
+      });
+    }
     const rootRuleIndex = toolRules.findIndex((rule) => rule.isRoot());
     if (rootRuleIndex === -1) {
       return [...toolRules, ...extraFiles];

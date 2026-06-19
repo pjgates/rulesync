@@ -44,6 +44,31 @@ describe("RulesyncSubagentFrontmatterSchema", () => {
     ).not.toThrow();
   });
 
+  it("should validate the exact omp provider block", () => {
+    const result = RulesyncSubagentFrontmatterSchema.safeParse({
+      targets: ["omp"],
+      name: "reviewer",
+      omp: {
+        tools: ["read"],
+        spawns: "*",
+        model: ["fast", "smart"],
+        thinkingLevel: "high",
+        output: { type: "object" },
+        blocking: true,
+        autoloadSkills: ["ast-grep"],
+        "read-summarize": true,
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.omp?.["read-summarize"]).toBe(true);
+    expect(
+      RulesyncSubagentFrontmatterSchema.safeParse({
+        name: "bad",
+        omp: { spawns: "named-agent" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("should reject frontmatter missing required fields", () => {
     const missingName = {
       targets: ["*"],

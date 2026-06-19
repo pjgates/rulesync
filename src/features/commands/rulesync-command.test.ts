@@ -213,6 +213,18 @@ describe("RulesyncCommand", () => {
       }
     });
 
+    it("should validate the exact omp provider block", () => {
+      const result = RulesyncCommandFrontmatterSchema.safeParse({
+        targets: ["omp"],
+        omp: { "argument-hint": "[ref]" },
+      });
+      expect(result.success).toBe(true);
+      expect(result.data?.omp).toEqual({ "argument-hint": "[ref]" });
+      expect(
+        RulesyncCommandFrontmatterSchema.safeParse({ omp: { "argument-hint": 1 } }).success,
+      ).toBe(false);
+    });
+
     it("should reject invalid targets", () => {
       const invalidData = {
         targets: "invalid_string",
