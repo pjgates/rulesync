@@ -196,9 +196,9 @@ This is a test rule for E2E testing.
     );
 
     await runGenerate({ target: "omp", features: "rules" });
-    const managedOutput = join(testDir, ".agents", "rules", "rulesync-triggered.md");
+    const managedOutput = join(testDir, ".agents", "rules", "rulesync-project-triggered.md");
     expect(await readFileContent(managedOutput)).toContain("rulesyncManaged: rulesync-omp-ttsr-v1");
-    const unmanagedOutput = join(testDir, ".agents", "rules", "rulesync-personal.md");
+    const unmanagedOutput = join(testDir, ".agents", "rules", "rulesync-project-personal.md");
     await writeFileContent(unmanagedOutput, "Personal rule\n");
 
     await rm(sourcePath);
@@ -215,6 +215,18 @@ This is a test rule for E2E testing.
     await runGenerate({ target: "omp", features: "rules" });
     expect(await fileExists(managedOutput)).toBe(false);
     expect(await readFileContent(unmanagedOutput)).toBe("Personal rule\n");
+  });
+  it("refuses to overwrite an unmanaged native OMP TTSR rule", async () => {
+    const testDir = getTestDir();
+    await writeFileContent(
+      join(testDir, RULESYNC_RULES_RELATIVE_DIR_PATH, "safety.md"),
+      `---\ntargets: ["omp"]\ncondition: ["DANGEROUS_CALL"]\n---\nGenerated safety rule\n`,
+    );
+    const unmanagedOutput = join(testDir, ".agents", "rules", "rulesync-project-safety.md");
+    await writeFileContent(unmanagedOutput, "Personal safety rule\n");
+
+    await expect(runGenerate({ target: "omp", features: "rules" })).rejects.toBeDefined();
+    expect(await readFileContent(unmanagedOutput)).toBe("Personal safety rule\n");
   });
 
   it("should write BOTH instructions (rules) and mcp into a single kilo.jsonc when generating rules+mcp together", async () => {

@@ -22,7 +22,8 @@ export const OMP_RULES_MARKER = ".rulesync-store-v1.json";
 export const OMP_RULES_EXTENSION = join(".omp", "agent", "extensions", "rulesync-project-rules.ts");
 export const OMP_TTSR_RULES_DIR = join(".agents", "rules");
 export const OMP_GLOBAL_TTSR_RULES_DIR = join(".omp", "agent", "rules");
-export const OMP_TTSR_RULE_PREFIX = "rulesync-";
+export const OMP_TTSR_RULE_PREFIX = "rulesync-project-";
+export const OMP_GLOBAL_TTSR_RULE_PREFIX = "rulesync-global-";
 export const OMP_TTSR_MANAGED = "rulesync-omp-ttsr-v1";
 
 export type OmpRuleSettablePaths = {
@@ -141,6 +142,11 @@ export class OmpRule extends ToolRule {
 
   hasTtsrCondition(): boolean {
     return Boolean(this.condition?.length || this.astCondition?.length);
+  }
+  hasGlobGatedProseScope(): boolean {
+    if (!this.getGlobs()?.length || !this.condition?.length) return false;
+    const scope = this.scope ?? [];
+    return scope.length === 0 || scope.some((token) => token === "text" || token === "thinking");
   }
 
   getTtsrFrontmatter(): Record<string, unknown> {
@@ -283,12 +289,16 @@ export function buildOmpRuleStoreFiles({
     utf8Compare(left.getRelativeFilePath(), right.getRelativeFilePath()),
   );
   for (const rule of sortedRules) {
-    const globs = rule.hasTtsrCondition()
+    for (const glob of rule.hasTtsrCondition()
       ? (rule.getGlobs() ?? [])
       : rule.isRoot()
         ? []
-        : (rule.getGlobs() ?? []);
-    for (const glob of globs) validateOmpRuleGlob(glob);
+        : (rule.getGlobs() ?? [])) {
+      validateOmpRuleGlob(glob);
+    }
+    if (rule.hasGlobGatedProseScope()) {
+      throw new Error("OMP TTSR rule globs require tool-only scope");
+    }
   }
   const privateRules = sortedRules.filter((rule) => !rule.hasTtsrCondition());
   const ttsrRules = sortedRules.filter((rule) => rule.hasTtsrCondition());
@@ -304,12 +314,13 @@ export function buildOmpRuleStoreFiles({
   });
   const storeDir = OmpRule.getSettablePaths({ global }).nonRoot.relativeDirPath;
   const ttsrDir = global ? OMP_GLOBAL_TTSR_RULES_DIR : OMP_TTSR_RULES_DIR;
+  const ttsrPrefix = global ? OMP_GLOBAL_TTSR_RULE_PREFIX : OMP_TTSR_RULE_PREFIX;
   const ttsrFiles = ttsrRules.map(
     (rule) =>
       new OmpGeneratedFile({
         outputRoot,
         relativeDirPath: ttsrDir,
-        relativeFilePath: `${OMP_TTSR_RULE_PREFIX}${rule.getRelativeFilePath()}`,
+        relativeFilePath: `${ttsrPrefix}${rule.getRelativeFilePath()}`,
         fileContent: emittedContent(
           stringifyFrontmatter(rule.getFileContent(), rule.getTtsrFrontmatter()),
         ),
@@ -325,6 +336,7 @@ export function buildOmpRuleStoreFiles({
     rules: markerRules,
   };
   const generated: ToolFile[] = [
+    ...privateRules,
     new OmpGeneratedFile({
       outputRoot,
       relativeDirPath: storeDir,
@@ -332,7 +344,6 @@ export function buildOmpRuleStoreFiles({
       fileContent: `${JSON.stringify(marker)}\n`,
       global,
     }),
-    ...privateRules,
     ...ttsrFiles,
   ];
 
@@ -539,7 +550,7 @@ function parseRule(value: unknown): MarkerRule | null {
   if (!Array.isArray(value.globs) || !value.globs.every((item) => typeof item === "string" && validGlob(item))) return null;
   return value as MarkerRule;
 }
-function loadStore(store: string, scope: "global" | "project", outputRoot: string, api: Api): LoadedRule[] {
+function loadStore(store: string, scope: "global" | "project", outputRoot: string, api: Api): LoadedRule[] | null {
   if (!fs.existsSync(store)) return [];
   try {
     if (!regular(store, true)) throw new Error("store is not a regular directory");
@@ -565,7 +576,7 @@ function loadStore(store: string, scope: "global" | "project", outputRoot: strin
     });
   } catch (error) {
     api.logger.error(\`Rulesync OMP \${scope} rule store rejected: \${error instanceof Error ? error.message : String(error)}\`);
-    return [];
+    return null;
   }
 }
 function projectRoot(cwd: string): string | null {
@@ -591,8 +602,8 @@ function rulesFor(cwd: string, api: Api): LoadedRule[] {
   const globalRules = loadStore(path.join(agentDir, "rulesync-rules"), "global", globalOutputRoot, api);
   const root = projectRoot(cwd);
   const projectRules = root ? loadStore(path.join(root, ".omp", "rulesync-rules"), "project", root, api) : [];
-  const result = [...globalRules, ...projectRules];
-  cache.set(cwd, result);
+  const result = [...(globalRules ?? []), ...(projectRules ?? [])];
+  if (globalRules !== null && projectRules !== null) cache.set(cwd, result);
   return result;
 }
 export default function rulesyncProjectRules(api: Api): void {
