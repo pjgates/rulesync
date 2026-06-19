@@ -116,6 +116,10 @@ describe("E2E: skills", () => {
       outputPath: join(".pi", "skills", "test-skill", "SKILL.md"),
     },
     {
+      target: "omp",
+      outputPath: join(".omp", "skills", "test-skill", "SKILL.md"),
+    },
+    {
       target: "zed",
       outputPath: join(".agents", "skills", "test-skill", "SKILL.md"),
     },
@@ -177,6 +181,38 @@ This is the test skill body content.
     expect(generatedContent).toContain("test skill body content");
   });
 
+  it("should preserve OMP skill metadata and support assets", async () => {
+    const testDir = getTestDir();
+    const sourceDir = join(testDir, RULESYNC_SKILLS_RELATIVE_DIR_PATH, "omp-rich");
+    await writeFileContent(
+      join(sourceDir, "SKILL.md"),
+      `---
+name: omp-rich
+description: OMP rich skill
+targets: [omp]
+omp:
+  allowed-tools: [read, bash]
+  disable-model-invocation: true
+  license: MIT
+  compatibility: OMP 16+
+  metadata:
+    author: rulesync
+---
+Use the reference.`,
+    );
+    await writeFileContent(join(sourceDir, "references", "api.md"), "# API\n");
+
+    await runGenerate({ target: "omp", features: "skills" });
+
+    const outputDir = join(testDir, ".omp", "skills", "omp-rich");
+    const generated = await readFileContent(join(outputDir, "SKILL.md"));
+    expect(generated).toContain("allowed-tools:");
+    expect(generated).toContain("disable-model-invocation: true");
+    expect(generated).toContain("compatibility: OMP 16+");
+    expect(generated).toContain("author: rulesync");
+    expect(await fileExists(join(outputDir, "references", "api.md"))).toBe(true);
+  });
+
   it.each([
     { target: "claudecode", orphanPath: join(".claude", "skills", "orphan-skill", "SKILL.md") },
     { target: "cursor", orphanPath: join(".cursor", "skills", "orphan-skill", "SKILL.md") },
@@ -204,6 +240,7 @@ This is the test skill body content.
     { target: "replit", orphanPath: join(".agents", "skills", "orphan-skill", "SKILL.md") },
     { target: "agentsskills", orphanPath: join(".agents", "skills", "orphan-skill", "SKILL.md") },
     { target: "pi", orphanPath: join(".pi", "skills", "orphan-skill", "SKILL.md") },
+    { target: "omp", orphanPath: join(".omp", "skills", "orphan-skill", "SKILL.md") },
     { target: "zed", orphanPath: join(".agents", "skills", "orphan-skill", "SKILL.md") },
     { target: "factorydroid", orphanPath: join(".factory", "skills", "orphan-skill", "SKILL.md") },
     { target: "vibe", orphanPath: join(".vibe", "skills", "orphan-skill", "SKILL.md") },
@@ -259,6 +296,7 @@ describe("E2E: skills (import)", () => {
     { target: "junie", sourcePath: join(".junie", "skills", "test-skill", "SKILL.md") },
     { target: "replit", sourcePath: join(".agents", "skills", "test-skill", "SKILL.md") },
     { target: "pi", sourcePath: join(".pi", "skills", "test-skill", "SKILL.md") },
+    { target: "omp", sourcePath: join(".omp", "skills", "test-skill", "SKILL.md") },
     { target: "zed", sourcePath: join(".agents", "skills", "test-skill", "SKILL.md") },
     { target: "factorydroid", sourcePath: join(".factory", "skills", "test-skill", "SKILL.md") },
     { target: "vibe", sourcePath: join(".vibe", "skills", "test-skill", "SKILL.md") },
@@ -397,6 +435,10 @@ describe("E2E: skills (global mode)", () => {
     {
       target: "pi",
       outputPath: join(".pi", "agent", "skills", "test-skill", "SKILL.md"),
+    },
+    {
+      target: "omp",
+      outputPath: join(".omp", "agent", "skills", "test-skill", "SKILL.md"),
     },
     {
       target: "replit",

@@ -31,6 +31,7 @@ export const ALL_TOOL_TARGETS = [
   "kiro-ide",
   "opencode",
   "pi",
+  "omp",
   "qwencode",
   "replit",
   "roo",

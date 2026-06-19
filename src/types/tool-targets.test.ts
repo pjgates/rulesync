@@ -68,6 +68,7 @@ describe("tool targets", () => {
         "kiro-ide",
         "opencode",
         "pi",
+        "omp",
         "qwencode",
         "replit",
         "roo",

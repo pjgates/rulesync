@@ -38,8 +38,8 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           TAG="${HEAD_BRANCH#release/}"
-          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Invalid release tag derived from branch: $HEAD_BRANCH"
+          if [ "$TAG" != "v8.30.1-omp.1" ]; then
+            echo "::error::Release tag must be exactly v8.30.1-omp.1, got: $TAG"
             exit 1
           fi
-          gh release edit "$TAG" --draft=false --latest
+          gh release edit "$TAG" --draft=false --latest=false

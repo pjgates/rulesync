@@ -8,9 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g., v7.6.2)"
+        description: "Release tag"
         required: true
         type: string
+        default: "v8.30.1-omp.1"
 
 permissions:
   contents: write # Required for uploading release assets
@@ -18,7 +19,7 @@ permissions:
 jobs:
   build-assets:
     name: Build and upload assets
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (
@@ -30,13 +31,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          # Pin to the merged commit SHA to avoid tagging a later commit if
-          # main advances between the PR merge and this workflow run.
-          # Falls back to main for workflow_dispatch runs.
-          ref: ${{ github.event.pull_request.merge_commit_sha || 'main' }}
+          # Pin every asset and injected fork commit to the commit that triggered
+          # this workflow, never to a moving branch.
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           # Fetch tags so the existence check below can see remote tags.
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Resolve resulting commit
+        id: resulting-commit
+        run: |
+          COMMIT="$(git rev-parse 'HEAD^{commit}')"
+          if ! echo "$COMMIT" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::Checked-out release commit is not lowercase 40-hex: $COMMIT"
+            exit 1
+          fi
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Configure git
         uses: ./.github/actions/git-config
@@ -47,31 +57,36 @@ jobs:
           experimental: true
 
       - name: Install dependencies
-        run: bun install
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build binaries
-        run: |
-          mkdir -p dist-bun
-          bun build --compile --minify --sourcemap --target=bun-linux-x64 --outfile=dist-bun/rulesync-linux-x64 ./src/cli/index.ts
-          bun build --compile --minify --sourcemap --target=bun-linux-arm64 --outfile=dist-bun/rulesync-linux-arm64 ./src/cli/index.ts
-          bun build --compile --minify --sourcemap --target=bun-darwin-arm64 --outfile=dist-bun/rulesync-darwin-arm64 ./src/cli/index.ts
-          bun build --compile --minify --sourcemap --target=bun-darwin-x64 --outfile=dist-bun/rulesync-darwin-x64 ./src/cli/index.ts
-          bun build --compile --minify --sourcemap --target=bun-windows-x64 --outfile=dist-bun/rulesync-windows-x64.exe ./src/cli/index.ts
+      - name: Run focused unit tests
+        run: >-
+          pnpm exec vitest run
+          src/version.test.ts
+          src/features/rules/omp-rule.test.ts
+          src/features/commands/omp-command.test.ts
+          src/features/skills/omp-skill.test.ts
+          src/features/subagents/omp-subagent.test.ts
+          src/features/rules/rules-processor.test.ts
+          src/features/commands/commands-processor.test.ts
+          src/features/skills/skills-processor.test.ts
+          src/features/subagents/subagents-processor.test.ts
 
-      - name: Generate checksums
-        run: |
-          cd dist-bun
-          sha256sum rulesync-* > SHA256SUMS
-          cat SHA256SUMS
+      - name: Run focused end-to-end tests
+        run: >-
+          pnpm exec vitest run --config vitest.e2e.config.ts
+          src/e2e/e2e-rules.spec.ts
+          src/e2e/e2e-commands.spec.ts
+          src/e2e/e2e-skills.spec.ts
+          src/e2e/e2e-subagents.spec.ts
+          src/e2e/e2e-input-root.spec.ts
+          src/e2e/omp-runtime-contract.spec.ts
 
-      - name: Generate JSON Schemas
-        run: pnpm generate:schema
-
-      - name: Generate repomix TOON variants
-        run: bun scripts/generate-repomix-toon.ts
-
-      - name: Bundle TOON files into zip
-        run: zip repomix-toon.zip repomix-output-*.toon
+      - name: Build pinned release assets
+        run: pnpm build:release-assets
+        env:
+          RULESYNC_RELEASE_TAG: v8.30.1-omp.1
+          RULESYNC_RESULTING_COMMIT: ${{ steps.resulting-commit.outputs.commit }}
 
       - name: Determine tag name
         id: tag
@@ -85,8 +100,8 @@ jobs:
             echo "::error::Could not determine tag name"
             exit 1
           fi
-          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Invalid tag format: $TAG"
+          if [ "$TAG" != "v8.30.1-omp.1" ]; then
+            echo "::error::Release tag must be exactly v8.30.1-omp.1, got: $TAG"
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -141,14 +156,7 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           draft: true
           files: |
-            install.sh
-            dist-bun/rulesync-linux-x64
-            dist-bun/rulesync-linux-arm64
-            dist-bun/rulesync-darwin-arm64
-            dist-bun/rulesync-darwin-x64
-            dist-bun/rulesync-windows-x64.exe
-            dist-bun/SHA256SUMS
-            repomix-toon.zip
-            config-schema.json
-            permissions-schema.json
-            mcp-schema.json
+            dist-release/rulesync-darwin-arm64
+            dist-release/omp-runtime-contract-darwin-arm64
+            dist-release/config-schema.json
+            dist-release/SHA256SUMS

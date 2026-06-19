@@ -20,6 +20,18 @@ export const RulesyncSubagentFrontmatterSchema = z.looseObject({
   targets: z._default(RulesyncTargetsSchema, ["*"]),
   name: z.string(),
   description: z.optional(z.string()),
+  omp: z.optional(
+    z.looseObject({
+      tools: z.optional(z.array(z.string())),
+      spawns: z.optional(z.union([z.array(z.string()), z.literal("*")])),
+      model: z.optional(z.union([z.string(), z.array(z.string())])),
+      thinkingLevel: z.optional(z.string()),
+      output: z.optional(z.unknown()),
+      blocking: z.optional(z.boolean()),
+      autoloadSkills: z.optional(z.array(z.string())),
+      "read-summarize": z.optional(z.boolean()),
+    }),
+  ),
   takt: z.optional(
     z.looseObject({
       name: z.optional(z.string()),

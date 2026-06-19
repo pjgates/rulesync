@@ -70,4 +70,8 @@ generateSchema(
 );
 
 // Format generated schema files with oxfmt for consistent formatting
-execFileSync("npx", ["oxfmt", outputPath, mcpOutputPath, permissionsOutputPath]);
+execFileSync(join(process.cwd(), "node_modules", ".bin", "oxfmt"), [
+  outputPath,
+  mcpOutputPath,
+  permissionsOutputPath,
+]);

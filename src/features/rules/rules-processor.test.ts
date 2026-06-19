@@ -13,6 +13,7 @@ import { ClaudecodeRule } from "./claudecode-rule.js";
 import { CopilotRule } from "./copilot-rule.js";
 import { CopilotcliRule } from "./copilotcli-rule.js";
 import { CursorRule } from "./cursor-rule.js";
+import { OMP_RULES_MARKER, OmpRule } from "./omp-rule.js";
 import { OpenCodeRule } from "./opencode-rule.js";
 import { RovodevRule } from "./rovodev-rule.js";
 import { RulesProcessor, type RulesProcessorToolTarget } from "./rules-processor.js";
@@ -226,6 +227,43 @@ describe("RulesProcessor", () => {
         expect(result).toHaveLength(1);
         expect(result[0]).toBeInstanceOf(ruleClass);
       }
+    });
+    it("builds the OMP store marker beside body-only rules", async () => {
+      const processor = new RulesProcessor({
+        logger,
+        toolTarget: "omp",
+        outputRoot: testDir,
+      });
+      const result = await processor.convertRulesyncFilesToToolFiles([
+        new RulesyncRule({
+          outputRoot: testDir,
+          relativeDirPath: RULESYNC_RULES_RELATIVE_DIR_PATH,
+          relativeFilePath: "overview.md",
+          frontmatter: { root: true, targets: ["omp"], description: "Overview" },
+          body: "OMP body",
+        }),
+      ]);
+
+      expect(result.map((file) => file.getRelativeFilePath())).toEqual([
+        OMP_RULES_MARKER,
+        "overview.md",
+      ]);
+      expect(result[1]).toBeInstanceOf(OmpRule);
+      expect(result[1]?.getFileContent()).toBe("OMP body\n");
+    });
+
+    it("builds an empty OMP marker and global extension", async () => {
+      const processor = new RulesProcessor({
+        logger,
+        toolTarget: "omp",
+        outputRoot: testDir,
+        global: true,
+      });
+      const result = await processor.convertRulesyncFilesToToolFiles([]);
+      expect(result.map((file) => file.getRelativeFilePath())).toEqual([
+        OMP_RULES_MARKER,
+        "rulesync-project-rules.ts",
+      ]);
     });
   });
 
@@ -907,6 +945,7 @@ Content that would fail parsing`;
         "junie",
         "kilo",
         "opencode",
+        "omp",
         "pi",
         "qwencode",
         "rovodev",
@@ -951,13 +990,14 @@ Content that would fail parsing`;
       expect(globalTargets).toContain("kilo");
       expect(globalTargets).toContain("goose");
       expect(globalTargets).toContain("opencode");
+      expect(globalTargets).toContain("omp");
       expect(globalTargets).toContain("pi");
       expect(globalTargets).toContain("rovodev");
       expect(globalTargets).toContain("takt");
       expect(globalTargets).toContain("vibe");
       expect(globalTargets).toContain("devin");
       expect(globalTargets).toContain("zed");
-      expect(globalTargets.length).toBe(24);
+      expect(globalTargets.length).toBe(25);
 
       // These targets should NOT be in global mode
       expect(globalTargets).not.toContain("cursor");

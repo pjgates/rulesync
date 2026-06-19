@@ -7,6 +7,7 @@ import { FetchOptions } from "../types/fetch.js";
 import { formatError } from "../utils/error.js";
 import type { Logger } from "../utils/logger.js";
 import { parseCommaSeparatedList } from "../utils/parse-comma-separated-list.js";
+import { RULESYNC_VERSION } from "../version.js";
 import { convertCommand, ConvertOptions } from "./commands/convert.js";
 import { fetchCommand } from "./commands/fetch.js";
 import { generateCommand, GenerateOptions } from "./commands/generate.js";
@@ -19,7 +20,7 @@ import { resolveGitignoreTargets } from "./commands/resolve-gitignore-targets.js
 import { updateCommand, UpdateCommandOptions } from "./commands/update.js";
 import { wrapCommand as _wrapCommand } from "./wrap-command.js";
 
-const getVersion = () => "8.30.1";
+const getVersion = () => RULESYNC_VERSION;
 
 function wrapCommand(
   name: string,

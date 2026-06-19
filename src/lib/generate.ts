@@ -9,6 +9,7 @@ import { HooksProcessor } from "../features/hooks/hooks-processor.js";
 import { IgnoreProcessor } from "../features/ignore/ignore-processor.js";
 import { McpProcessor } from "../features/mcp/mcp-processor.js";
 import { PermissionsProcessor } from "../features/permissions/permissions-processor.js";
+import { OMP_RULES_EXTENSION } from "../features/rules/omp-rule.js";
 import { RulesProcessor } from "../features/rules/rules-processor.js";
 import { RulesyncSkill } from "../features/skills/rulesync-skill.js";
 import { SkillsProcessor } from "../features/skills/skills-processor.js";
@@ -21,7 +22,7 @@ import type { Feature } from "../types/features.js";
 import type { RulesyncFile } from "../types/rulesync-file.js";
 import type { ToolTarget } from "../types/tool-targets.js";
 import { formatError } from "../utils/error.js";
-import { fileExists } from "../utils/file.js";
+import { fileExists, removeFile } from "../utils/file.js";
 import type { Logger } from "../utils/logger.js";
 import type { FeatureGenerateResult } from "../utils/result.js";
 
@@ -128,7 +129,10 @@ async function processFeatureWithRulesyncFiles(params: {
   rulesyncFiles: RulesyncFile[];
 }): Promise<FeatureGenerateResult> {
   const { config, processor, rulesyncFiles } = params;
-  if (rulesyncFiles.length === 0) {
+  if (
+    rulesyncFiles.length === 0 &&
+    (!(processor instanceof RulesProcessor) || !processor.requiresOutputForEmptyRules())
+  ) {
     return processEmptyFeatureGeneration({ config, processor });
   }
   const toolFiles = await processor.convertRulesyncFilesToToolFiles(rulesyncFiles);
@@ -250,6 +254,25 @@ async function generateRulesCore(params: {
   const supportedTargets = RulesProcessor.getToolTargets({ global: config.getGlobal() });
   const toolTargets = intersection(config.getTargets(), supportedTargets);
   warnUnsupportedTargets({ config, supportedTargets, featureName: "rules", logger });
+
+  const ompRulesEnabled =
+    config.getTargets().includes("omp") && config.getFeatures("omp").includes("rules");
+  if (config.getGlobal() && !ompRulesEnabled) {
+    for (const outputRoot of config.getOutputRoots()) {
+      const extensionPath = join(outputRoot, OMP_RULES_EXTENSION);
+      if (!(await fileExists(extensionPath))) continue;
+      if (config.getCheck()) {
+        // Check mode reports drift without mutating the output root.
+      } else if (config.getDryRun()) {
+        logger.info(`[DRY RUN] Would delete: ${extensionPath}`);
+      } else {
+        await removeFile(extensionPath);
+      }
+      totalCount += 1;
+      allPaths.push(OMP_RULES_EXTENSION);
+      hasDiff = true;
+    }
+  }
 
   for (const outputRoot of config.getOutputRoots()) {
     for (const toolTarget of toolTargets) {

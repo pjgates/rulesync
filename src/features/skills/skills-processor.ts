@@ -31,6 +31,7 @@ import { KiloSkill } from "./kilo-skill.js";
 import { KiroCliSkill } from "./kiro-cli-skill.js";
 import { KiroIdeSkill } from "./kiro-ide-skill.js";
 import { KiroSkill } from "./kiro-skill.js";
+import { OmpSkill } from "./omp-skill.js";
 import { OpenCodeSkill } from "./opencode-skill.js";
 import { PiSkill } from "./pi-skill.js";
 import { QwencodeSkill } from "./qwencode-skill.js";
@@ -104,6 +105,7 @@ const skillsProcessorToolTargetTuple = [
   "kiro-ide",
   "opencode",
   "pi",
+  "omp",
   "qwencode",
   "replit",
   "roo",
@@ -303,6 +305,13 @@ export const toolSkillFactories = new Map<SkillsProcessorToolTarget, ToolSkillFa
     "pi",
     {
       class: PiSkill,
+      meta: { supportsProject: true, supportsSimulated: false, supportsGlobal: true },
+    },
+  ],
+  [
+    "omp",
+    {
+      class: OmpSkill,
       meta: { supportsProject: true, supportsSimulated: false, supportsGlobal: true },
     },
   ],
